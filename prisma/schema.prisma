@@ -1,0 +1,636 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  SALESMAN
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  PROSPECT
+  DO_NOT_CONTACT
+  ARCHIVED
+}
+
+enum FollowUpType {
+  CALL
+  WHATSAPP
+  VISIT
+  GENERAL
+}
+
+enum FollowUpPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum FollowUpStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum FollowUpOutcome {
+  INTERESTED
+  NOT_INTERESTED
+  CALL_LATER
+  ORDER_CONFIRMED
+  NO_RESPONSE
+  OTHER
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  DOCUMENT
+  AUDIO
+  VIDEO
+  LOCATION
+  CONTACT
+  TEMPLATE
+  INTERACTIVE
+  SYSTEM
+  UNKNOWN
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RECEIVED
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  QUEUED
+  SENDING
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum CampaignRecipientStatus {
+  QUEUED
+  PROCESSING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  CANCELLED
+  SKIPPED
+}
+
+enum ResponseClassification {
+  INTERESTED
+  NOT_INTERESTED
+  NEEDS_FOLLOWUP
+  ORDER_CONFIRMED
+  NO_RESPONSE
+  OTHER
+}
+
+enum ImportStatus {
+  UPLOADED
+  VALIDATED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Better Auth owns password hashing and stores password hashes in Account.password.
+// User intentionally has no duplicate passwordHash field.
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          Role      @default(SALESMAN)
+  phone         String?
+  active        Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions           Session[]
+  accounts           Account[]
+  customers          Customer[]
+  routes             Route[]
+  customerNotes      CustomerNote[]
+  activities         ActivityLog[]
+  auditLogs          AuditLog[]
+  assignedFollowUps  FollowUp[]          @relation("AssignedFollowUps")
+  createdFollowUps   FollowUp[]          @relation("CreatedFollowUps")
+  conversations      Conversation[]
+  campaigns          Campaign[]
+  segments           Segment[]
+  imports            ImportBatch[]
+  savedCustomerViews SavedCustomerView[]
+
+  @@index([role, active])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model RateLimit {
+  id          String @id @default(cuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+}
+
+model Customer {
+  id                    String         @id @default(cuid())
+  customerCode          String         @unique
+  businessName          String
+  contactPerson         String         @default("")
+  phone                 String
+  phoneNormalized       String         @unique
+  alternatePhone        String?
+  email                 String?
+  customerTypeId        String?
+  areaId                String?
+  routeId               String?
+  assignedUserId        String?
+  status                CustomerStatus @default(ACTIVE)
+  whatsappOptIn         Boolean        @default(false)
+  whatsappOptInAt       DateTime?
+  whatsappOptInSource   String?
+  whatsappOptOutAt      DateTime?
+  whatsappOptOutReason  String?
+  addressLine1          String?
+  addressLine2          String?
+  city                  String?
+  district              String?
+  state                 String?
+  postalCode            String?
+  country               String?
+  notes                 String?
+  lastContactedAt       DateTime?
+  lastCustomerMessageAt DateTime?
+  lastBusinessMessageAt DateTime?
+  lastCampaignAt        DateTime?
+  lastOrderDate         DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  archivedAt            DateTime?
+
+  customerType       CustomerType?       @relation(fields: [customerTypeId], references: [id], onDelete: SetNull)
+  area               Area?               @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  route              Route?              @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  assignedUser       User?               @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  tags               CustomerTag[]
+  customerNotes      CustomerNote[]
+  activities         ActivityLog[]
+  followUps          FollowUp[]
+  conversation       Conversation?
+  messages           Message[]
+  campaignRecipients CampaignRecipient[]
+
+  @@index([businessName])
+  @@index([status, archivedAt])
+  @@index([assignedUserId, status])
+  @@index([areaId])
+  @@index([routeId])
+  @@index([customerTypeId])
+  @@index([lastContactedAt])
+  @@index([createdAt, id])
+}
+
+model CustomerType {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  active      Boolean    @default(true)
+  archivedAt  DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  customers   Customer[]
+}
+
+model Area {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  customers Customer[]
+}
+
+model Route {
+  id             String     @id @default(cuid())
+  name           String     @unique
+  description    String?
+  assignedUserId String?
+  active         Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  assignedUser   User?      @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  customers      Customer[]
+
+  @@index([assignedUserId])
+}
+
+model Tag {
+  id          String        @id @default(cuid())
+  name        String        @unique
+  description String?
+  color       String        @default("emerald")
+  active      Boolean       @default(true)
+  archivedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  customers   CustomerTag[]
+}
+
+model CustomerTag {
+  customerId String
+  tagId      String
+  createdAt  DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([customerId, tagId])
+  @@index([tagId, customerId])
+}
+
+model CustomerNote {
+  id              String   @id @default(cuid())
+  customerId      String
+  content         String
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdByUser   User     @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, createdAt])
+}
+
+model ActivityLog {
+  id          String    @id @default(cuid())
+  customerId  String?
+  userId      String?
+  type        String
+  entityType  String?
+  entityId    String?
+  description String
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([customerId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+}
+
+model ImportBatch {
+  id             String       @id @default(cuid())
+  fileName       String
+  uploadedBy     String
+  totalRows      Int          @default(0)
+  validRows      Int          @default(0)
+  invalidRows    Int          @default(0)
+  duplicateRows  Int          @default(0)
+  insertedRows   Int          @default(0)
+  updatedRows    Int          @default(0)
+  skippedRows    Int          @default(0)
+  status         ImportStatus @default(UPLOADED)
+  mapping        Json         @default("{}")
+  rows           Json         @default("[]")
+  report         Json         @default("{}")
+  duplicateMode  String       @default("skip")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  completedAt    DateTime?
+  uploadedByUser User         @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
+
+  @@index([uploadedBy, createdAt])
+  @@index([status])
+}
+
+model Segment {
+  id               String     @id @default(cuid())
+  name             String
+  description      String?
+  filterDefinition Json
+  createdBy        String
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  createdByUser    User       @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  campaigns        Campaign[]
+
+  @@index([createdBy])
+}
+
+model SavedCustomerView {
+  id               String   @id @default(cuid())
+  name             String
+  userId           String
+  filterDefinition Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model FollowUp {
+  id              String           @id @default(cuid())
+  customerId      String
+  assignedUserId  String
+  createdByUserId String
+  type            FollowUpType     @default(GENERAL)
+  priority        FollowUpPriority @default(NORMAL)
+  status          FollowUpStatus   @default(PENDING)
+  dueAt           DateTime
+  title           String
+  notes           String?
+  outcome         FollowUpOutcome?
+  completedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignedUser    User             @relation("AssignedFollowUps", fields: [assignedUserId], references: [id], onDelete: Restrict)
+  createdByUser   User             @relation("CreatedFollowUps", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([assignedUserId, dueAt])
+  @@index([status, dueAt])
+  @@index([customerId, dueAt])
+}
+
+model Conversation {
+  id             String             @id @default(cuid())
+  customerId     String             @unique
+  status         ConversationStatus @default(OPEN)
+  assignedUserId String?
+  lastMessageAt  DateTime           @default(now())
+  unreadCount    Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  customer       Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignedUser   User?              @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  messages       Message[]
+
+  @@index([lastMessageAt, id])
+  @@index([assignedUserId, status, lastMessageAt])
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  conversationId    String
+  customerId        String
+  direction         MessageDirection
+  type              MessageType      @default(TEXT)
+  whatsappMessageId String?          @unique
+  textContent       String?
+  mediaId           String?
+  mediaUrl          String?
+  mimeType          String?
+  templateName      String?
+  status            MessageStatus    @default(QUEUED)
+  errorCode         String?
+  errorMessage      String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  rawPayload        Json?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  conversation      Conversation     @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  customer          Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, createdAt])
+  @@index([conversationId, createdAt, id])
+}
+
+model Template {
+  id             String     @id @default(cuid())
+  metaTemplateId String?    @unique
+  name           String
+  language       String
+  category       String
+  status         String     @default("PENDING")
+  headerType     String?
+  headerContent  String?
+  body           String
+  footer         String?
+  buttons        Json?
+  variables      Json?
+  components     Json?
+  lastSyncedAt   DateTime?
+  lastTestedAt   DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  campaigns      Campaign[]
+
+  @@unique([name, language])
+  @@index([status, category])
+}
+
+model Campaign {
+  id               String              @id @default(cuid())
+  name             String
+  description      String?
+  templateId       String
+  segmentId        String?
+  status           CampaignStatus      @default(DRAFT)
+  scheduledAt      DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdByUserId  String
+  filterDefinition Json                @default("{}")
+  variableMapping  Json                @default("{}")
+  audienceSummary  Json                @default("{}")
+  previewedAt      DateTime?
+  testSentAt       DateTime?
+  confirmedAt      DateTime?
+  totalRecipients  Int                 @default(0)
+  queuedCount      Int                 @default(0)
+  sentCount        Int                 @default(0)
+  deliveredCount   Int                 @default(0)
+  readCount        Int                 @default(0)
+  failedCount      Int                 @default(0)
+  repliedCount     Int                 @default(0)
+  interestedCount  Int                 @default(0)
+  orderCount       Int                 @default(0)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  template         Template            @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  segment          Segment?            @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  createdByUser    User                @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  recipients       CampaignRecipient[]
+
+  @@index([status, scheduledAt])
+  @@index([createdAt])
+  @@index([createdByUserId])
+}
+
+model CampaignRecipient {
+  id                     String                  @id @default(cuid())
+  campaignId             String
+  customerId             String
+  phone                  String
+  renderedPayload        Json
+  status                 CampaignRecipientStatus @default(QUEUED)
+  whatsappMessageId      String?                 @unique
+  queuedAt               DateTime?
+  sentAt                 DateTime?
+  deliveredAt            DateTime?
+  readAt                 DateTime?
+  failedAt               DateTime?
+  repliedAt              DateTime?
+  failureReason          String?
+  responseClassification ResponseClassification?
+  conversionMetadata     Json?
+  attempts               Int                     @default(0)
+  claimedAt              DateTime?
+  nextAttemptAt          DateTime?
+  providerAttemptedAt    DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  campaign               Campaign                @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  customer               Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@unique([campaignId, customerId])
+  @@index([campaignId, status])
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([status, claimedAt])
+  @@index([customerId, sentAt])
+}
+
+model WebhookEvent {
+  id              String    @id @default(cuid())
+  externalEventId String?   @unique
+  eventType       String
+  payload         Json
+  processed       Boolean   @default(false)
+  processedAt     DateTime?
+  error           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([processed, createdAt])
+}
+
+model UnmatchedContact {
+  id                 String    @id @default(cuid())
+  phoneNormalized    String    @unique
+  displayName        String?
+  messages           Json      @default("[]")
+  lastMessageAt      DateTime  @default(now())
+  resolvedAt         DateTime?
+  resolvedCustomerId String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([resolvedAt, lastMessageAt])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Durable mock webhooks let development exercise the same receive/status pipeline.
+model MockEvent {
+  id          String    @id @default(cuid())
+  eventType   String
+  payload     Json
+  dueAt       DateTime
+  processedAt DateTime?
+  claimedAt   DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([processedAt, dueAt])
+}

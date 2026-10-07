@@ -1,0 +1,1 @@
+export default function Loading() { return <div className="space-y-6" aria-label="Loading workspace" aria-busy="true"><div className="skeleton h-10 w-72"/><div className="grid grid-cols-3 gap-4"><div className="skeleton h-28"/><div className="skeleton h-28"/><div className="skeleton h-28"/></div><div className="skeleton h-80"/></div>; }

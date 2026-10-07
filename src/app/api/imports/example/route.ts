@@ -1,0 +1,4 @@
+import { handleApi } from "@/lib/api";
+import { requireRole } from "@/lib/authorization";
+import { makeWorkbook } from "@/modules/imports/files";
+export async function GET(request: Request) { return handleApi(async () => { await requireRole("ADMIN", "MANAGER"); const bytes = await makeWorkbook(["Business Name", "Contact Person", "Phone", "Email", "Customer Type", "Area", "Route", "Salesman", "Tags", "Address", "City", "State", "Postal Code", "WhatsApp Opt-In", "WhatsApp Opt-In Source"], [["Example customer — replace this row", "Example contact", "", "", "", "", "", "", "", "", "", "", "", "no", ""]]); return new Response(new Uint8Array(bytes), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": 'attachment; filename="customer-import-example.xlsx"', "Cache-Control": "private, no-store" } }); }, request); }
